@@ -15,6 +15,11 @@ pub fn build(b: *std.Build) void {
     // set a preferred release mode, allowing the user to decide how to optimize.
     const optimize = b.standardOptimizeOption(.{});
 
+    const tree_sitter_pkg = b.dependency("zig_tree_sitter", .{
+        .target = target,
+        .optimize = optimize,
+    });
+
     // This creates a "module", which represents a collection of source files alongside
     // some compilation options, such as optimization mode and linked system libraries.
     // Every executable or library we compile will be based on one or more modules.
@@ -43,6 +48,7 @@ pub fn build(b: *std.Build) void {
     // This is what allows Zig source code to use `@import("foo")` where 'foo' is not a
     // file path. In this case, we set up `exe_mod` to import `lib_mod`.
     exe_mod.addImport("tree_sitting_lib", lib_mod);
+    exe_mod.addImport("tree-sitter", tree_sitter_pkg.module("tree-sitter"));
 
     // Now, we will create a static library based on the module we created above.
     // This creates a `std.Build.Step.Compile`, which is the build step responsible
@@ -64,6 +70,7 @@ pub fn build(b: *std.Build) void {
         .name = "tree_sitting",
         .root_module = exe_mod,
     });
+    exe.linkLibrary(tree_sitter_pkg.artifact("zig-tree-sitter"));
 
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
