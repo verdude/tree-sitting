@@ -10,34 +10,18 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    const lib_mod = b.createModule(.{
-        .root_source_file = b.path("src/root.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-
     const exe_mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });
 
-    exe_mod.addImport("tree_sitting_lib", lib_mod);
     exe_mod.addImport("tree-sitter", tree_sitter_pkg.module("tree-sitter"));
-
-    const lib = b.addLibrary(.{
-        .linkage = .static,
-        .name = "tree_sitting",
-        .root_module = lib_mod,
-    });
-
-    b.installArtifact(lib);
 
     const exe = b.addExecutable(.{
         .name = "tree_sitting",
         .root_module = exe_mod,
     });
-    exe.linkLibrary(tree_sitter_pkg.artifact("zig-tree-sitter"));
 
     b.installArtifact(exe);
 
@@ -52,12 +36,6 @@ pub fn build(b: *std.Build) void {
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
 
-    const lib_unit_tests = b.addTest(.{
-        .root_module = lib_mod,
-    });
-
-    const run_lib_unit_tests = b.addRunArtifact(lib_unit_tests);
-
     const exe_unit_tests = b.addTest(.{
         .root_module = exe_mod,
     });
@@ -65,6 +43,18 @@ pub fn build(b: *std.Build) void {
     const run_exe_unit_tests = b.addRunArtifact(exe_unit_tests);
 
     const test_step = b.step("test", "Run unit tests");
-    test_step.dependOn(&run_lib_unit_tests.step);
     test_step.dependOn(&run_exe_unit_tests.step);
+
+    exe.addCSourceFile(.{
+        .file = .{ .cwd_relative = "lib/tree-sitter-javascript/src/parser.c" },
+        .flags = &.{ "-std=c99", "-fPIC", "-w" },
+    });
+
+    exe.addCSourceFile(.{
+        .file = .{ .cwd_relative = "lib/tree-sitter-javascript/src/scanner.c" },
+        .flags = &.{ "-std=c99", "-fPIC", "-w" },
+    });
+
+    exe.linkLibC();
+    exe.linkSystemLibrary("c++");
 }
