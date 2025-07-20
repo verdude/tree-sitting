@@ -5,8 +5,10 @@ const ts = @import("tree-sitter");
 const args = @import("args.zig");
 const jsfile = @import("js_file.zig");
 const ReadError = jsfile.ReadError;
-
-extern fn tree_sitter_javascript() callconv(.C) *ts.Language;
+const models = @import("models.zig");
+const Model = models.Model;
+const ts_fn = @import("sitter-reexport.zig");
+const Splitter = @import("split.zig");
 
 fn load_file(al: std.mem.Allocator) !jsfile {
     var ar = args.init();
@@ -15,9 +17,13 @@ fn load_file(al: std.mem.Allocator) !jsfile {
     return try jsfile.load(filename, al);
 }
 
+fn cost(bytes: f32, cmpt: f32) f32 {
+    return bytes / 1_000_000 * cmpt;
+}
+
 pub fn main() !void {
     var gpai = std.heap.GeneralPurposeAllocator(.{}){};
-    var gpa = gpai.allocator();
+    const gpa = gpai.allocator();
     defer {
         const deinit_status = gpai.deinit();
         if (deinit_status == .leak) {
@@ -28,7 +34,7 @@ pub fn main() !void {
     var file = try load_file(gpa);
     defer file.unload();
 
-    const language = tree_sitter_javascript();
+    const language = ts_fn.tree_sitter_javascript();
     defer language.destroy();
 
     const parser = ts.Parser.create();
@@ -36,28 +42,20 @@ pub fn main() !void {
 
     try parser.setLanguage(language);
 
-    // Parse some source code and get the root node
     const tree = parser.parseString(file.buf, null).?;
     defer tree.destroy();
 
     const node = tree.rootNode();
     var cursor = node.walk();
-    std.log.debug("Child count: {d}", .{node.childCount()});
-    const children = try node.children(&cursor, &gpa);
-    for (children) |c| {
-        std.log.debug("Child: {s}", .{ts.Node.ts_node_string(c)});
-    }
+    std.log.debug("Root: {s}", .{ts_fn.ts_node_type(node)});
 
-    // Create a query and execute it
-    // var error_offset: u32 = 0;
-    // const query = try ts.Query.create(language, "name: (identifier) @name", &error_offset);
-    // defer query.destroy();
-    // const cursor = ts.QueryCursor.create();
-    // defer cursor.destroy();
-    // cursor.exec(query, node);
+    // ninos mem
+    const size = 1024 * 5;
+    var fba_buf: [size]u8 = undefined;
+    var fba = std.heap.FixedBufferAllocator.init(&fba_buf);
+    var stackalloc = fba.allocator();
 
-    // Get the captured node of the first match
-    // const match = cursor.nextMatch().?;
-    // const capture = match.captures[0].node;
-    // std.debug.assert(std.mem.eql(u8, capture.type(), "identifier"));
+    var splitter = Splitter.init(models.gpt41(), &cursor, &stackalloc);
+    const chunks = try splitter.ninos(&cursor);
+    std.log.debug("done? {?}", .{chunks});
 }
